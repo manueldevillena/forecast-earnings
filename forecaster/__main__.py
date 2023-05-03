@@ -25,8 +25,8 @@ def parse_arguments() -> argparse.ArgumentParser:
 def read_data(data_path: Path) -> dict[str, pd.DataFrame]:
     data = {
         dataset: {
-            param: pd.read_csv(data_path / dataset / f"{param}.csv", index_col=0)
-            for param in ["spot_price", "energy"]
+            param: pd.read_csv(data_path / dataset / f"{param}.csv")
+            for param in ["price", "energy"]
         }
         for dataset in ["train_test", "validate"]
     }
@@ -55,20 +55,22 @@ def create_features(
     features : dict
         features, targets, and scalers
     """
-    X_y, scaler_train = CreateFeatures(
+    X_y, scaler = CreateFeatures(
         shift=inputs["shift"],
         which_scalers=inputs["which_scalers"],
-        original_data=data["train_test"][target]
+        original_data=data["train_test"][target],
+        column_target=target
     )()
-    X_y_validate, scaler_validate = CreateFeatures(
+    X_y_validate, scaler = CreateFeatures(
         shift=inputs["shift"],
         which_scalers=inputs["which_scalers"],
         original_data=data["validate"][target],
-        scalers=scaler_train,
+        column_target=target,
+        scalers=scaler,
         validation=True
     )()
 
-    return X_y, X_y_validate, scaler_train
+    return X_y, X_y_validate, scaler
 
 
 def estimator(X_y: NDArray, X_y_validate: NDArray, qf_params: dict[str, dict[str, int]]):
@@ -95,9 +97,9 @@ def main() -> None:
     data = read_data(Path(inputs["path_to_dataset"]))
 
     # Create features
-    X_y, X_y_validate, scaler_validate = create_features(inputs, data, target)
+    X_y, X_y_validate, scaler = create_features(inputs, data, target)
     estimator_ = estimator(X_y, X_y_validate, inputs["qf_params"])
-    predictions = estimator_.predict(X_y_validate, scaler_validate)
+    predictions = estimator_.predict(X_y_validate, scaler)
     estimator_.plot_results(predictions)
 
 

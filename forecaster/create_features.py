@@ -18,6 +18,7 @@ class CreateFeatures:
     shift: int
     which_scalers: dict[str, str]
     original_data: pd.DataFrame
+    column_target: str
     features: dict[str, NDArray] = field(default_factory=dict)
     targets: dict[str, NDArray] = field(default_factory=dict)
     scalers: dict[str, MinMaxScaler | StandardScaler] = field(default_factory=dict)
@@ -63,8 +64,8 @@ class CreateFeatures:
     def autocorrelation_features(self):
         """Creates the autocorrelation features
         """
-        X_raw = copy.copy(self.original_data)
-        y_raw = copy.copy(self.original_data)
+        X_raw = self.original_data[self.column_target]
+        y_raw = self.original_data[self.column_target]
         X_cols = pd.DataFrame()
         for t in range(self.shift):
             X_cols[t] = X_raw.shift(periods=-t)
@@ -83,17 +84,17 @@ class CreateFeatures:
         """Creates the time dependent features
         """
         Xy_raw = self.original_data.shift(periods=-self.shift)[:-self.shift]
-        X_raw = pd.DataFrame(pd.to_datetime(Xy_raw["settlement_period"]))
-        y_raw = Xy_raw["load"]
+        X_raw = pd.DataFrame(pd.to_datetime(Xy_raw["datetime"]))
+        y_raw = Xy_raw.values
 
-        X_raw["day"] = X_raw["settlement_period"].dt.day
+        X_raw["day"] = X_raw["datetime"].dt.day
         X_raw["weekend"] = (
-                X_raw["settlement_period"].dt.weekday > 4
+                X_raw["datetime"].dt.weekday > 4
         ).replace(to_replace=False, value=0).replace(to_replace=True, value=1)
-        X_raw["week"] = X_raw["settlement_period"].dt.week
+        X_raw["week"] = X_raw["datetime"].dt.isocalendar().week
 
         X = X_raw[["day", "weekend", "week"]].values
-        y = y_raw.values.reshape(-1, 1)
+        y = y_raw.reshape(-1, 1)
 
         self.features["time"] = X
         self.targets["time"] = y
