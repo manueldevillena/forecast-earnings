@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pandas as pd
 
@@ -31,6 +32,7 @@ class CreateFeatures:
     def __call__(
             self
     ) -> tuple[dict[str, dict[str, NDArray]], dict[str, MinMaxScaler | StandardScaler]]:
+
         scalers = self.autocorrelation_features()
         self.time_features()
 
@@ -61,8 +63,8 @@ class CreateFeatures:
     def autocorrelation_features(self):
         """Creates the autocorrelation features
         """
-        X_raw = self.original_data["load"]
-        y_raw = self.original_data["load"]
+        X_raw = copy.copy(self.original_data)
+        y_raw = copy.copy(self.original_data)
         X_cols = pd.DataFrame()
         for t in range(self.shift):
             X_cols[t] = X_raw.shift(periods=-t)
@@ -85,7 +87,9 @@ class CreateFeatures:
         y_raw = Xy_raw["load"]
 
         X_raw["day"] = X_raw["settlement_period"].dt.day
-        X_raw["weekend"] = (X_raw["settlement_period"].dt.weekday > 4).replace(to_replace=False, value=0).replace(to_replace=True, value=1)
+        X_raw["weekend"] = (
+                X_raw["settlement_period"].dt.weekday > 4
+        ).replace(to_replace=False, value=0).replace(to_replace=True, value=1)
         X_raw["week"] = X_raw["settlement_period"].dt.week
 
         X = X_raw[["day", "weekend", "week"]].values
@@ -117,6 +121,7 @@ class CreateFeatures:
             scalers: dict[str, StandardScaler | MinMaxScaler]
     ) -> dict[str, NDArray]:
         """Scales the features (e.g., minmax)
+
         Parameters
         ----------
         features : NDArray
@@ -125,14 +130,16 @@ class CreateFeatures:
             Array with targets to be scaled
         scalers : dict[str, StandardScaler | MinMaxScaler]
             Scaler objects to use with the features and the targets
+
         Returns
         -------
         scaled features and targets
         """
-        X_scaled = scalers["features"].fit_transform(features)
         if not self.validation:
+            X_scaled = scalers["features"].fit_transform(features)
             y_scaled = scalers["targets"].fit_transform(targets)
         else:
+            X_scaled = scalers["features"].transform(features)
             y_scaled = targets
 
         return {
@@ -141,8 +148,10 @@ class CreateFeatures:
         }, scalers
 
     @staticmethod
-    def _split_train_test(X: NDArray, y: NDArray, test_size: float = 0.33) -> dict[str, dict[str, NDArray] | None]:
+    def _split_train_test(X: NDArray, y: NDArray, test_size: float = 0.33
+                          ) -> dict[str, dict[str, NDArray] | None]:
         """Splits the dataset into train and test
+
         Parameters
         ----------
         X : NDArray
@@ -151,12 +160,15 @@ class CreateFeatures:
             targets set
         test_size : float
             proportion of test set after splitting
+
         Returns
         -------
         train_test : dict[str, dict[str, NDArray]]
             dictionary with train and test
         """
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, shuffle=False
+        )
 
         return {
             "train": {

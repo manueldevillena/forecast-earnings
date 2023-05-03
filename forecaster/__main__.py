@@ -12,11 +12,11 @@ from .quantile_forest import QuantileForest
 def parse_arguments() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parsing the inputs to run the module.")
     parser.add_argument("-i", "--inputs", dest="inputs", help="TOML file with input data.")
+    # parser.add_argument(
+    #     "its" "--inputs_timeseries", dest="inputs_timeseries", help="Input features."
+    # )
     parser.add_argument(
-        "its" "--inputs_timeseries", dest="inputs_timeseries", help="Input features."
-    )
-    parser.add_argument(
-        "tts" "--target_timeseries", dest="target_timeseries", help="Timeseries to forecast."
+        "-tts", "--target_timeseries", dest="target_timeseries", help="Timeseries to forecast."
     )
 
     return parser.parse_args()
@@ -36,17 +36,34 @@ def read_data(data_path: Path) -> dict[str, pd.DataFrame]:
 
 def create_features(
         inputs: dict[str, str | int],
-        data: dict[str, pd.DataFrame]
+        data: dict[str, pd.DataFrame],
+        target: str
 ) -> dict[str, dict[str, NDArray] | None]:
+    """Creates the feature objects for train, test, and validation
+
+    Parameters
+    ----------
+    inputs : dict
+        hyper-parameters
+    data : dict
+        input data
+    target : str
+        target to forecast
+
+    Returns
+    -------
+    features : dict
+        features, targets, and scalers
+    """
     X_y, scaler_train = CreateFeatures(
         shift=inputs["shift"],
         which_scalers=inputs["which_scalers"],
-        original_data=data["train_test"]
+        original_data=data["train_test"][target]
     )()
     X_y_validate, scaler_validate = CreateFeatures(
         shift=inputs["shift"],
         which_scalers=inputs["which_scalers"],
-        original_data=data["validate"],
+        original_data=data["validate"][target],
         scalers=scaler_train,
         validation=True
     )()
@@ -72,12 +89,13 @@ def main() -> None:
 
     # Read inputs
     inputs = read_input_file(args.inputs)
+    target = args.target_timeseries
 
     # Read data
     data = read_data(Path(inputs["path_to_dataset"]))
 
     # Create features
-    X_y, X_y_validate, scaler_validate = create_features(inputs, data)
+    X_y, X_y_validate, scaler_validate = create_features(inputs, data, target)
     estimator_ = estimator(X_y, X_y_validate, inputs["qf_params"])
     predictions = estimator_.predict(X_y_validate, scaler_validate)
     estimator_.plot_results(predictions)
