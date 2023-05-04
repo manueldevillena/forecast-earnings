@@ -37,7 +37,7 @@ class CreateFeatures:
         scalers = self.autocorrelation_features()
         self.time_features()
 
-        features = self._merge_features(self.features)
+        features = self.features["autocorrelation"]  # self._merge_features(self.features)
         targets = self.targets["autocorrelation"]
 
         if self.split_train_test:

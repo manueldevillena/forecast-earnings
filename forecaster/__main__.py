@@ -121,7 +121,7 @@ def main() -> None:
             args.outputs,
             args.target_timeseries,
             scaler,
-            pd.date_range(start="2023-04-01 00:00:00", end="2024-03-31 23:00:00", freq="H")
+            t_end=pd.to_datetime("2024-03-31 23:00:00")
         )
 
 

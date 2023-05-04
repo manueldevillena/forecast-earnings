@@ -84,7 +84,7 @@ class QuantileForest:
             output_dir: str,
             target: str,
             scaler,
-            date_range,
+            t_end,
             quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     ) -> None:
         """
@@ -96,41 +96,31 @@ class QuantileForest:
         X_scaled = scaler["features"].transform(X.reshape(-1, len(X)))
 
         t = pd.to_datetime(X_raw["datetime"][-1:].values[0]) + pd.Timedelta(hours=1)
-        time_features = self.__get_time_features(t)
 
-        X_scaled = np.concatenate((X_scaled.ravel(), time_features))
-        X_scaled = X_scaled.reshape(1, len(X_scaled))
+        quantiles = [f"p{p*100:.0f}" for p in quantiles]
+        X_quantiles = {q: X_scaled for q in quantiles}
+        predictions = pd.DataFrame(columns=quantiles)
+        while t < t_end:
+            X_scaled = X_scaled.reshape(1, len(X_scaled.ravel()))
 
-        prediction_scaled = self.rfqr.predict(X_scaled, quantiles=quantiles)
-        predictions = scaler["targets"].inverse_transform(prediction_scaled)
-        predictions = pd.DataFrame(
-            predictions, columns=[f"p{p*100:.0f}" for p in quantiles],
-            index=[t]
-        )
-
-        quantiles = predictions.columns
-        X_quantiles = {q: X for q in quantiles}
-        for t in date_range:
-            X_quantiles = {
-                q: scaler["features"].transform(
-                    np.concatenate(
-                        (X_quantiles[q].ravel()[1:], predictions[q].values[-1].ravel())
-                    ).reshape(1, len(X_quantiles[q].ravel()))
-                )
-                for q in quantiles
-            }
-            time_features = self.__get_time_features(t)
             predictions_aux = pd.Series(index=quantiles, dtype=np.float64)
             for key, vals in X_quantiles.items():
-                vals = np.concatenate((vals.ravel(), time_features))
-                vals = vals.reshape(1, len(vals))
-                predictions_aux[key] = scaler["targets"].inverse_transform(
-                    self.rfqr.predict(
-                        vals, quantiles=[(int(key[1:]) / 100)]
-                    ).reshape(-1, 1)).ravel()
-
+                vals = vals.reshape(1, len(vals.ravel()))
+                predictions_aux[key] = self.rfqr.predict(vals, quantiles=[(int(key[1:]) / 100)])
             predictions.loc[t] = predictions_aux
 
+            X_quantiles = {
+                q: np.concatenate(
+                        (X_quantiles[q].ravel()[1:], predictions[q].values[-1].ravel())
+                ).reshape(1, len(X_quantiles[q].ravel()))
+                for q in quantiles
+            }
+
+            t = t + pd.Timedelta(hours=1)
+
+        index = predictions.index
+        predictions_unscaled = scaler["targets"].inverse_transform(predictions.values)
+        predictions = pd.DataFrame(predictions_unscaled, columns=quantiles, index=index)
         predictions.to_csv(f"{output_dir}/{target}_predictions.csv")
 
     @staticmethod
