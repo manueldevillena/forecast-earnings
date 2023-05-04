@@ -8,10 +8,10 @@ targets = "minmax" # Scaler to use, currently "minmax" and "standard" are suppor
 
 [qf_params]
 [qf_params.kf_params]
-n_splits = 10
+n_splits = 2
 random_state = false
 [qf_params.rfqr_params]
 random_state = false
 min_samples_split = 25
-n_estimators = 2000
+n_estimators = 10
 n_jobs = -1

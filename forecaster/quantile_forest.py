@@ -1,4 +1,5 @@
-import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 from numpy.typing import NDArray
 
@@ -55,39 +56,85 @@ class QuantileForest:
 
     def predict(
             self,
-            X_y_validate: NDArray,
+            X_y_predict: NDArray,
             scaler,
+            output_dir: str,
+            target_predictions: str,
             quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     ) -> dict[str, NDArray]:
-        X = X_y_validate["validate"]["X"]
-        y = X_y_validate["validate"]["y"]
+        X = X_y_predict["validate"]["X"]
+        y = X_y_predict["validate"]["y"]
 
         predictions_scaled = self.rfqr.predict(X, quantiles=quantiles)
 
         predictions = scaler["targets"].inverse_transform(predictions_scaled)
+        predictions = pd.DataFrame(predictions, columns=[f"p{p*100:.0f}" for p in quantiles])
+        predictions["target"] = y
+        predictions.to_csv(f"{output_dir}/{target_predictions}_predictions.csv")
 
         return {
             "y_pred": predictions,
             "y": y
         }
 
-    @staticmethod
-    def plot_results(results: dict[str, NDArray]) -> None:
-        """Plots results
+    def roll_predict(
+            self,
+            X_raw: pd.DataFrame,
+            shift: int,
+            output_dir: str,
+            target: str,
+            scaler,
+            date_range,
+            quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    ) -> None:
         """
-        y_pred = results["y_pred"]
-        y_true = results["y"]
+        Predicts in a rolling window there the last prediction becomes part of the feature space
+        for the subsequent predictions
+        """
+        X_raw = X_raw[-shift:]
+        X = X_raw[target].values
+        X_scaled = scaler["features"].transform(X.reshape(-1, len(X)))
 
-        plt.plot(y_true, "ro")
-        for i in range(y_pred.shape[1]):
-            plt.plot(y_pred[:, i], "b", alpha=0.3)
-        # plt.fill_between(
-            # np.arange(len(y_pred)), lower, upper, alpha=0.2, color="r",
-            # label="Pred. interval")
-        plt.xlabel("Ordered samples.")
-        plt.ylabel("Values and prediction intervals.")
-        plt.xlim([0, 500])
-        plt.show()
+        t = pd.to_datetime(X_raw["datetime"][-1:].values[0]) + pd.Timedelta(hours=1)
+        time_features = self.__get_time_features(t)
 
-    def save_predictions(self) -> None:
-        pass
+        X_scaled = np.concatenate((X_scaled.ravel(), time_features))
+        X_scaled = X_scaled.reshape(1, len(X_scaled))
+
+        prediction_scaled = self.rfqr.predict(X_scaled, quantiles=quantiles)
+        predictions = scaler["targets"].inverse_transform(prediction_scaled)
+        predictions = pd.DataFrame(
+            predictions, columns=[f"p{p*100:.0f}" for p in quantiles],
+            index=[t]
+        )
+
+        quantiles = predictions.columns
+        X_quantiles = {q: X for q in quantiles}
+        for t in date_range:
+            X_quantiles = {
+                q: scaler["features"].transform(
+                    np.concatenate(
+                        (X_quantiles[q].ravel()[1:], predictions[q].values[-1].ravel())
+                    ).reshape(1, len(X_quantiles[q].ravel()))
+                )
+                for q in quantiles
+            }
+            time_features = self.__get_time_features(t)
+            predictions_aux = pd.Series(index=quantiles, dtype=np.float64)
+            for key, vals in X_quantiles.items():
+                vals = np.concatenate((vals.ravel(), time_features))
+                vals = vals.reshape(1, len(vals))
+                predictions_aux[key] = scaler["targets"].inverse_transform(self.rfqr.predict(
+                    vals).reshape(-1, 1)).ravel()
+            predictions.loc[t] = predictions_aux
+
+        predictions.to_csv(f"{output_dir}/{target}_predictions.csv")
+
+    @staticmethod
+    def __get_time_features(t) -> np.ndarray:
+        day = t.day
+        weekend = 1 if t.day_of_week > 4 else 0
+        week = t.week
+
+        return np.array([day, weekend, week])
+
