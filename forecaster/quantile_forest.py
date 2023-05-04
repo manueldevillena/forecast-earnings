@@ -124,8 +124,11 @@ class QuantileForest:
             for key, vals in X_quantiles.items():
                 vals = np.concatenate((vals.ravel(), time_features))
                 vals = vals.reshape(1, len(vals))
-                predictions_aux[key] = scaler["targets"].inverse_transform(self.rfqr.predict(
-                    vals).reshape(-1, 1)).ravel()
+                predictions_aux[key] = scaler["targets"].inverse_transform(
+                    self.rfqr.predict(
+                        vals, quantiles=[(int(key[1:]) / 100)]
+                    ).reshape(-1, 1)).ravel()
+
             predictions.loc[t] = predictions_aux
 
         predictions.to_csv(f"{output_dir}/{target}_predictions.csv")

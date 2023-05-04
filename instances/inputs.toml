@@ -13,5 +13,5 @@ random_state = false
 [qf_params.rfqr_params]
 random_state = false
 min_samples_split = 25
-n_estimators = 2000
+n_estimators = 1000
 n_jobs = -1
