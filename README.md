@@ -16,6 +16,8 @@ pip install -r requirements.txt
 ```
 
 ## Running the package
+First activate the environment with `source .venv/bin/activate` (assuming that your poetry environment is installed in the same project, otherwise you must point at the adequate folder).
+
 To run the helper, type:
 ```bash
 python -m forecaster -h
